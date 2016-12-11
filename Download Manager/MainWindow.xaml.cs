@@ -24,5 +24,17 @@ namespace Download_Manager
         {
             InitializeComponent();
         }
+
+        Downloader x;
+        private void button_Click(object sender, RoutedEventArgs e)
+        {
+            x = new Downloader();
+            x.ProgressTracker.Tick += ProgressTracker_Tick;
+        }
+
+        private void ProgressTracker_Tick(object sender, EventArgs e)
+        {
+            progress.Text = "Completed: " + x.DwnlProgress + " Speed: " + x.DwnlSpeed;
+        }
     }
 }
