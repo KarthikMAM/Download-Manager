@@ -1,0 +1,8 @@
+root = true
+
+#Use 4-sized tabs for indentation
+[*]
+charset = utf-8
+indent_style = tab
+indent_size = 4
+trim_trailing_whitespace = true
