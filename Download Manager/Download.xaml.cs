@@ -55,9 +55,11 @@ namespace Download_Manager
             //update progress details in the ui
             if (downloader.DwnlSize > 0)
             {
-                barDownload.Value = downloader.DwnlProgress / downloader.DwnlSize;
-                lblSize.Content = String.Format("{0:f2} / {1:f2} MB", downloader.DwnlProgress, downloader.DwnlSize);
+                barDownload.Value = downloader.DwnlCompleted / downloader.DwnlSize;
+                lblSize.Content = String.Format("{0:f2} / {1:f2} MB", downloader.DwnlCompleted, downloader.DwnlSize);
                 lblProgress.Content = String.Format("{0:f2} MBps", downloader.DwnlSpeed);
+
+                if (downloader.DwnlCompleted == downloader.DwnlSize) btnPause.IsEnabled = false;
             }
         }
 
@@ -87,6 +89,11 @@ namespace Download_Manager
                     break;
             }
             btnSender.IsEnabled = true;
+        }
+
+        private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
+        {
+            downloader.Stop();
         }
     }
 }

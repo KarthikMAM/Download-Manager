@@ -26,13 +26,13 @@
         <Label Content="Threads :"    Grid.Row="3" HorizontalContentAlignment="Right" VerticalContentAlignment="Center"/>
         <Label Content="Limit (MB) :" Grid.Row="4" HorizontalContentAlignment="Right" VerticalContentAlignment="Center"/>
 
-        <TextBox Name="txtURL" Grid.Column="1" Grid.Row="1" VerticalContentAlignment="Center"/>
+        <TextBox Name="txtURL" Grid.Column="1" Grid.Row="1" VerticalContentAlignment="Center" Text="http://download.sony-asia.com.edgesuite.net/vaio/downloads/Win8Original/20133Q/SVF1431_SVF1531/SOAVUD-00291255-0082.EXE"/>
         <Grid Grid.Column="1" Grid.Row="2">
             <TextBox Name="txtTarget" HorizontalContentAlignment="Stretch" Text="{Binding ElementName=DwnlDialog, Path=Target}" VerticalContentAlignment="Center"/>
             <Button Name="btnTarget" Content="*" FontSize="20" FontWeight="ExtraBold" Width="20" HorizontalAlignment="Right" Click="btnTarget_Click"/>
         </Grid>
-        <TextBox Name="txtThreads" Grid.Column="1" Grid.Row="3" VerticalContentAlignment="Center" Text="3"/>
-        <TextBox Name="txtLimit" Grid.Column="1" Grid.Row="4" VerticalContentAlignment="Center" Text="30"/>
+        <TextBox Name="txtThreads" Grid.Column="1" Grid.Row="3" VerticalContentAlignment="Center" Text="3" ToolTip="Optimal number of threads give you more speed."/>
+        <TextBox Name="txtLimit" Grid.Column="1" Grid.Row="4" VerticalContentAlignment="Center" Text="30" ToolTip="Size of each part."/>
         <Button Name="btnOk" Content="Ok" Grid.Column="1" Grid.Row="5" HorizontalAlignment="Right" Width="50" Margin="0,5" Click="btnOk_Click"/>
     </Grid>
 </Window>

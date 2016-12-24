@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:Download_Manager"
         mc:Ignorable="d"
-        Title="Download" Height="200" Width="500" ResizeMode="CanMinimize">
+        Title="Download" Height="200" Width="500" ResizeMode="CanMinimize" Closing="Window_Closing">
     <Grid Margin="5">
         <Grid.RowDefinitions>
             <RowDefinition Height="10*"/>

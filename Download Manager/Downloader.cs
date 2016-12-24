@@ -13,6 +13,7 @@ namespace Download_Manager
         //common constants
         private const int MB = 1048576;
         private const int KB = 1024;
+        private const string FILE_SIZE_SERVER = "http://proxyfilesize.appspot.com/index.php?url=";
 
         //download data
         private long dwnlSize;
@@ -32,19 +33,18 @@ namespace Download_Manager
         private int activeThreads = 4;
 
         //tracker data
-        private long dwnlProgress;
+        private long dwnlCompleted;
         private long dwnlSpeed;
         private long[] chunkProgress;
         private int searchStart, searchEnd;
         private DispatcherTimer progressTracker;
 
         //public tracker property
-        public double DwnlProgress { get { return (double)dwnlProgress / MB; } }
+        public double DwnlCompleted { get { return (double)dwnlCompleted / MB; } }
         public double DwnlSpeed { get { return (double)dwnlSpeed / MB; } }
         public DispatcherTimer ProgressTracker { get { return progressTracker; } }
         public double DwnlSize { get { return (double)dwnlSize / MB; } }
-
-
+        
         /// <summary>
         /// creates a task tracker and sets download data
         /// </summary>
@@ -55,12 +55,12 @@ namespace Download_Manager
         public Downloader(string dwnlPath, string targetPath, int chunkSize, int activeThreads)
         {
             //define the required parameters
-            ServicePointManager.DefaultConnectionLimit = 30;
+            ServicePointManager.DefaultConnectionLimit = 60;
             this.dwnlPath = dwnlPath;
             this.targetPath = targetPath;
             this.chunkSize = chunkSize * MB;
             this.activeThreads = activeThreads;
-            
+
             //define the tracker
             progressTracker = new DispatcherTimer();
             progressTracker.Interval = TimeSpan.FromSeconds(1);
@@ -82,9 +82,10 @@ namespace Download_Manager
             {
                 try
                 {
-                    PrepareTask();
-                    StartTask();
-                    MessageBox.Show("Download saved as " + targetPath, "Download Complete!");
+                    if (PrepareTask() == true)
+                    {
+                        StartDownload();
+                    }
                 }
                 catch (Exception e)
                 {
@@ -141,13 +142,20 @@ namespace Download_Manager
         /// <summary>
         /// sets params based on the file size
         /// </summary>
-        private void PrepareTask()
+        /// <returns>returns whether the download can be started or not</returns>
+        private bool PrepareTask()
         {
             //get the file size
-            HttpWebRequest sizeReq = HttpWebRequest.CreateHttp(dwnlPath);
-            sizeReq.AllowAutoRedirect = true;
-            WebResponse sizeRes = sizeReq.GetResponse();
-            dwnlSize = sizeRes.ContentLength;
+            HttpWebRequest sizeReq = HttpWebRequest.CreateHttp(FILE_SIZE_SERVER + (dwnlPath.Contains("http") ? dwnlPath : "http://" + dwnlPath));
+            HttpWebResponse sizeRes = (HttpWebResponse)sizeReq.GetResponse();
+            dwnlSize = Int64.Parse(new StreamReader(sizeRes.GetResponseStream()).ReadLine());
+            sizeRes.Close();
+
+            //get the download headers
+            HttpWebRequest headerReq = HttpWebRequest.CreateHttp(dwnlPath);
+            headerReq.AllowAutoRedirect = true;
+            headerReq.AddRange(0, chunkSize);
+            HttpWebResponse headerRes = (HttpWebResponse)headerReq.GetResponse();
 
             //find the number of chunks to be downloaded
             if (sizeRes.Headers[HttpResponseHeader.AcceptRanges] == "bytes")
@@ -158,17 +166,21 @@ namespace Download_Manager
             {
                 chunkCount = 1;
             }
+            headerRes.Close();
 
             //set necessary containers
             dwnlThreads = new Thread[chunkCount];
             chunkProgress = new long[chunkCount];
 
             //create the directory environment
-            chunkPath = Path.Combine((uint)targetPath.GetHashCode() + "", chunkPath);
+            //unique directory based on download params
+            chunkPath = Path.Combine((uint)(targetPath + chunkCount + chunkSize).GetHashCode() + "", chunkPath);
             if (File.Exists(String.Format(chunkPath, 0)) == false)
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(chunkPath) + "");
             }
+
+            return true;
         }
 
         /// <summary>
@@ -195,15 +207,15 @@ namespace Download_Manager
                 {
                     //get the progress of the thread and add it to the overall progress
                     long newProgress = new FileInfo(String.Format(chunkPath, i)).Length;
-                    if (newProgress == chunkSize && searchStart == i) searchStart += 1; // changed from se - i = 1
+                    if (newProgress == chunkSize && searchStart == i) searchStart += 1; 
                     dwnlSpeed += newProgress - chunkProgress[i];
                     chunkProgress[i] = newProgress;
                 }
             }
-            dwnlProgress += dwnlSpeed;
+            dwnlCompleted += dwnlSpeed;
 
             //stop tracker when job is complete
-            if (abortFlag == true) StopTask();
+            if (abortFlag == true) StopDownload();
         }
 
         /// <summary>
@@ -212,12 +224,15 @@ namespace Download_Manager
         /// and blocks till all the threads have finished work
         /// appends the downloaded chunk
         /// </summary>
-        private void StartTask()
+        private void StartDownload()
         {
             //start threads and wait till job completion
             nextThread = Math.Min(activeThreads, chunkCount);
             for (int i = 0; i < chunkCount; i++)
+            {
                 dwnlThreads[i] = new Thread(new ParameterizedThreadStart(DownloadChunk));
+                dwnlThreads[i].Priority = ThreadPriority.AboveNormal;
+            }
 
             //acquire lock to streamline the start of the thread
             lock (lockObj)
@@ -231,19 +246,19 @@ namespace Download_Manager
                 if (dwnlThreads[i].ThreadState != ThreadState.Unstarted)
                     dwnlThreads[i].Join();
 
-            //if not aborted append the chunks
-            //otherwise raise an error
-            if (abortFlag != true)
+            //if download complete append the chunks
+            if (dwnlSize == dwnlCompleted)
+            {
                 AppendChunks();
-            else
-                throw new Exception("Download aborted by the user");
+                MessageBox.Show("Download saved as " + targetPath, "Download Complete!");
+            }
         }
 
         /// <summary>
         /// stops the download task and its tracker
         /// delete the cache when download is complete
         /// </summary>
-        private void StopTask()
+        private void StopDownload()
         {
             if (progressTracker.IsEnabled == true)
             {
@@ -292,13 +307,15 @@ namespace Download_Manager
                 HttpWebRequest dwnlReq = WebRequest.CreateHttp(dwnlPath);
                 dwnlReq.AddRange(chunkStart, chunkEnd);
                 dwnlReq.AllowAutoRedirect = true;
+                HttpWebResponse dwnlRes = (HttpWebResponse)dwnlReq.GetResponse();
 
                 //download the chunk
-                BufferedStream dwnlSource = new BufferedStream(dwnlReq.GetResponse().GetResponseStream());
+                BufferedStream dwnlSource = new BufferedStream(dwnlRes.GetResponseStream());
                 BufferedStream dwnlTarget = new BufferedStream(new FileStream(chunkFile, FileMode.Append, FileAccess.Write));
                 dwnlSource.CopyTo(dwnlTarget);
                 dwnlSource.Close();
                 dwnlTarget.Close();
+                dwnlRes.Close();
             }
 
             //start the next thread without overlapping updates
