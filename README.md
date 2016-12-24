@@ -1,5 +1,7 @@
 # Download Manager
 
+<h4><a href="https://rink.hockeyapp.net/apps/721a284baf954769bdd90e1af815bb28">Download and Review in HockeyApp</a></h4>
+
 <h4>Features</h4>
 <ul>
     <li>Multithreaded optimisations
@@ -13,7 +15,7 @@
 <h4>Uses</h4>
 <ul>
     <li>Use as an alternative downloader.
-    <li>Use the well documented <a href="DownloadManager">Downloader</a> library in your projects.
+    <li>Use the well documented <a href="Downloader">Downloader</a> library in your projects.
 </ul>
 
 <h4>Note</h4>
