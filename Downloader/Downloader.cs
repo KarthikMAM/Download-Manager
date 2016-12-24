@@ -22,12 +22,12 @@ namespace DownloadHelper
 
         //generalised chunk properties
         public string ChunkSource { get { return DwnlSource; } }
-        public string ChunkTarget { get { return (uint)(DwnlSource + ChunkSize).GetHashCode() + "/file {0}.chunk"; } }
-        public long ChunkSize { private set; get; }
+        public string ChunkTarget { get { return (uint)(DwnlSource + CHUNK_SIZE_LIMIT).GetHashCode() + "/file {0}.chunk"; } }
+        public const long CHUNK_SIZE_LIMIT = 4 * MB;
         public long ChunkCount { private set; get; }
 
         //chunk's downloaders, trackers and data
-        public long ChunksActive;
+        public const long ACTIVE_THREAD_LIMIT = 8;
         public DownloadTracker DwnlTracker;
         public ChunkDownloader[] ChunkDownloaders;
         public Exception DwnlException;
@@ -70,9 +70,7 @@ namespace DownloadHelper
             {
                 //set the download parameters
                 DwnlSize = FindFileSize();
-                ChunkSize = 4 * MB;
                 ChunkCount = FindChunkCount();
-                ChunksActive = 10;
 
                 //create a temp directory for chunks
                 if (!Directory.Exists(Path.GetDirectoryName(ChunkTarget)))
@@ -97,7 +95,7 @@ namespace DownloadHelper
         {
             //request for finding the number of chunks
             HttpWebRequest rangeReq = WebRequest.CreateHttp(DwnlSource);
-            rangeReq.AddRange(0, ChunkSize);
+            rangeReq.AddRange(0, CHUNK_SIZE_LIMIT);
             rangeReq.AllowAutoRedirect = true;
 
             //returns appropriate number of chunks
@@ -105,11 +103,10 @@ namespace DownloadHelper
             {
                 if (rangeRes.StatusCode < HttpStatusCode.Redirect && rangeRes.Headers[HttpResponseHeader.AcceptRanges] == "bytes")
                 {
-                    return (DwnlSize / ChunkSize + (DwnlSize % ChunkSize > 0 ? 1 : 0));
+                    return (DwnlSize / CHUNK_SIZE_LIMIT + (DwnlSize % CHUNK_SIZE_LIMIT > 0 ? 1 : 0));
                 }
                 else
                 {
-                    ChunkSize = DwnlSize;
                     return 1;
                 }
             }
@@ -183,13 +180,13 @@ namespace DownloadHelper
 
                 //creates the downloader thread's containers
                 ChunkDownloaders = new ChunkDownloader[ChunkCount];
-                for (long i = 0, chunkStart = 0; i < ChunkCount; i++, chunkStart += ChunkSize)
+                for (long i = 0, chunkStart = 0; i < ChunkCount; i++, chunkStart += CHUNK_SIZE_LIMIT)
                 {
                     ChunkDownloaders[i] = new ChunkDownloader(
                         ChunkSource,
                         String.Format(ChunkTarget, i),
                         chunkStart,
-                        Math.Min(chunkStart + ChunkSize - 1, DwnlSize));
+                        Math.Min(chunkStart + CHUNK_SIZE_LIMIT - 1, DwnlSize));
                 }
                 GC.Collect();
 
@@ -209,7 +206,7 @@ namespace DownloadHelper
 
                 //start allowed number of chunk downloaders
                 long nextChunk;
-                for (nextChunk = 0; nextChunk < Math.Min(ChunkCount, ChunksActive); nextChunk++)
+                for (nextChunk = 0; nextChunk < Math.Min(ChunkCount, ACTIVE_THREAD_LIMIT); nextChunk++)
                 {
                     ChunkDownloaders[nextChunk].Start();
                 }

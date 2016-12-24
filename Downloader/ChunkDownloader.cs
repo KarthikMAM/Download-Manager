@@ -4,67 +4,68 @@ using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace DownloadHelper
+namespace Downloader
 {
-    public class ChunkDownloader
+    /// <summary>
+    /// each of these downloads one chunk of the download
+    /// </summary>
+    public class ChunkDownloader : IChunkDownloader
     {
-        //download thread
-        private Thread dwnlThread;
-        public Exception DwnlException { private set; get; }
+        //constants
         private const int BUFFER_SIZE = 8192;
-        private byte[] buffer = new byte[BUFFER_SIZE];
+
+        //download thread and exceptions
+        private Thread dwnlThread;
+        private Exception dwnlException;
 
         //chunk data
-        private string chunkSource;
-        private string chunkTarget;
-        private long chunkStart;
-        private long chunkEnd;
+        private Chunks chunks;
+        private long id;
 
         /// <summary>
-        /// initializes the download thread for the given chunk
+        /// initializes a downloader for the given chunk
         /// </summary>
-        /// <param name="chunkSource">url to download from</param>
-        /// <param name="chunkTarget">url to save download</param>
-        /// <param name="chunkStart">starting position of the chunk</param>
-        /// <param name="chunkEnd">ending position of the chunk</param>
-        public ChunkDownloader(string chunkSource, string chunkTarget, long chunkStart, long chunkEnd)
+        /// <param name="chunks">chunks meta data repo</param>
+        /// <param name="id">id of the chunk</param>
+        public ChunkDownloader(Chunks chunks, long id)
         {
             //set the parameters
-            this.chunkSource = chunkSource;
-            this.chunkTarget = chunkTarget;
-            this.chunkStart = chunkStart;
-            this.chunkEnd = chunkEnd;
-
-            //create a new thread to download the chunk
-            //and abort if the dwnl request is still open
-            dwnlThread = new Thread(new ThreadStart(Download));
+            this.chunks = chunks;
+            this.id = id;
         }
 
         /// <summary>
-        /// start the thread if not running
+        /// create and start the download thread
         /// </summary>
         public void Start()
         {
-            dwnlThread.Start();
-        }
-
-        /// <summary>
-        /// waits till the thread finishes running
-        /// </summary>
-        public void Join()
-        {
-            if (dwnlThread.IsAlive)
+            if (dwnlThread == null || !dwnlThread.IsAlive)
             {
-                dwnlThread.Join();
+                dwnlException = null;
+                dwnlThread = new Thread(new ThreadStart(Download));
+                dwnlThread.Start();
             }
         }
 
         /// <summary>
-        /// abort thread the thread
+        /// waits till the thread finishes running
+        /// if there is any error throws exceptions
+        /// </summary>
+        public void Join()
+        {
+            if (dwnlThread != null && dwnlThread.IsAlive)
+            {
+                dwnlThread.Join();
+            }
+            if (dwnlException != null) throw dwnlException;
+        }
+
+        /// <summary>
+        /// aborts the running thread
         /// </summary>
         public void Abort()
         {
-            if (dwnlThread.IsAlive)
+            if (dwnlThread != null && dwnlThread.IsAlive)
             {
                 dwnlThread.Abort();
                 dwnlThread.Join();
@@ -77,13 +78,16 @@ namespace DownloadHelper
         public void Download()
         {
             //adjust the download range and the completed part
-            chunkStart += File.Exists(chunkTarget) ? new FileInfo(chunkTarget).Length : 0;
+            long chunkStart = chunks.ChunkStart(id);
+            long chunkEnd = chunks.ChunkEnd(id);
+            chunkStart += Interlocked.Exchange(ref chunks.ChunkProgress[id],
+                File.Exists(chunks.ChunkTarget(id)) ? new FileInfo(chunks.ChunkTarget(id)).Length : 0);
 
             //check if there is a need to download
             if (chunkStart < chunkEnd)
             {
                 //prepare the download request
-                HttpWebRequest dwnlReq = WebRequest.CreateHttp(chunkSource);
+                HttpWebRequest dwnlReq = WebRequest.CreateHttp(chunks.ChunkSource);
                 dwnlReq.AllowAutoRedirect = true;
                 dwnlReq.AddRange(chunkStart, chunkEnd);
                 dwnlReq.ServicePoint.ConnectionLimit = 100;
@@ -93,9 +97,11 @@ namespace DownloadHelper
                 {
                     using (HttpWebResponse dwnlRes = (HttpWebResponse)dwnlReq.GetResponse())
                     using (Stream dwnlSource = dwnlRes.GetResponseStream())
-                    using (FileStream dwnlTarget = new FileStream(chunkTarget, FileMode.Append, FileAccess.Write))
+                    using (FileStream dwnlTarget = new FileStream(chunks.ChunkTarget(id), FileMode.Append, FileAccess.Write))
                     {
-                        int bufferdSize;
+                        //buffer and downloaded buffer size
+                        int downloadedBufferSize;
+                        byte[] buffer = new byte[BUFFER_SIZE];
                         do
                         {
                             //read the download response async
@@ -104,15 +110,17 @@ namespace DownloadHelper
                             Task<int> bufferReader = dwnlSource.ReadAsync(buffer, 0, BUFFER_SIZE);
                             dwnlTarget.Flush();
                             bufferReader.Wait();
-                            bufferdSize = bufferReader.Result;
-                            dwnlTarget.Write(buffer, 0, bufferdSize);
-                        } while (bufferdSize > 0);
+                            downloadedBufferSize = bufferReader.Result;
+                            Interlocked.Add(ref chunks.ChunkProgress[id], downloadedBufferSize);
+                            dwnlTarget.Write(buffer, 0, downloadedBufferSize);
+                        } while (downloadedBufferSize > 0);
                     }
 
                 }
+                catch (ThreadAbortException) { /* ignore this exception */ }
                 catch (Exception e)
                 {
-                    DwnlException = e;
+                    dwnlException = e;
                 }
                 finally
                 {
