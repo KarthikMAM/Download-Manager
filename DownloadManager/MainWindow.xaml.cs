@@ -149,7 +149,7 @@ namespace DownloadManager
                 case DwnlState.Idle:
                     btController.Content = "Resume";
                     btController.IsEnabled = true;
-                    txtProgress.Content = DotAnimation(txtProgress.Content.ToString(), "Waiting to start / resume the download");
+                    txtProgress.Content = "Waiting to start / resume the download ● ● ●";
 
                     break;
                 case DwnlState.Download:
@@ -170,9 +170,8 @@ namespace DownloadManager
                     //update progress of the download as append
                     txtSize.Content = String.Format("{0:f3} MB", (double)download.DwnlSize / Download.MB);
                     txtComplete.Content = String.Format("{0:f3} MB", (double)download.DwnlSize / Download.MB);
-                    txtSpeed.Content = String.Format("{0:f3} MBps", (double)download.AppendProgress / Download.MB);
 
-                    txtProgress.Content = DotAnimation(txtProgress.Content.ToString(), "Stitching chunks at " + txtSpeed.Content);
+                    txtProgress.Content = DotAnimation(txtProgress.Content.ToString(), "Stitching chunks at {0:2f} % " + download.AppendProgress / download.DwnlSize * 100);
 
                     break;
                 case DwnlState.Complete:
@@ -193,8 +192,6 @@ namespace DownloadManager
 
                     break;
             }
-
-            //update the progress bar value and its message
             barProgress.Value = download.DwnlProgress;
         }
 

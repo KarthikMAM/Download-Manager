@@ -39,12 +39,9 @@ namespace Downloader
         /// </summary>
         public void Start()
         {
-            if (dwnlThread == null || !dwnlThread.IsAlive)
-            {
-                dwnlException = null;
-                dwnlThread = new Thread(new ThreadStart(Download));
-                dwnlThread.Start();
-            }
+            dwnlException = null;
+            dwnlThread = new Thread(() => Download());
+            dwnlThread.Start();
         }
 
         /// <summary>
@@ -80,8 +77,9 @@ namespace Downloader
             //adjust the download range and the completed part
             long chunkStart = chunks.ChunkStart(id);
             long chunkEnd = chunks.ChunkEnd(id);
-            chunkStart += Interlocked.Exchange(ref chunks.ChunkProgress[id],
-                File.Exists(chunks.ChunkTarget(id)) ? new FileInfo(chunks.ChunkTarget(id)).Length : 0);
+            long chunkDownloaded = File.Exists(chunks.ChunkTarget(id)) ? new FileInfo(chunks.ChunkTarget(id)).Length : 0;
+            chunkStart += chunkDownloaded;
+            chunks.ChunkProgress[id] = chunkDownloaded;
 
             //check if there is a need to download
             if (chunkStart < chunkEnd)

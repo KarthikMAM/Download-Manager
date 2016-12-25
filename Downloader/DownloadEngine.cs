@@ -1,6 +1,8 @@
 ﻿using System;
 using System.IO;
 using System.Threading;
+using System.Threading.Tasks;
+using System.Windows;
 using System.Windows.Threading;
 
 namespace Downloader
@@ -22,7 +24,7 @@ namespace Downloader
         //engine workers
         private ChunkDownloader[] chunkDownloaders;
         private Thread workerThread;
-        private long threadLimit = 8;
+        private long threadLimit = 10;
 
         //engine trackers
         private DispatcherTimer downloadTracker;
@@ -78,15 +80,19 @@ namespace Downloader
             switch (State)
             {
                 case DwnlState.Download:
+                case DwnlState.Append:
+                case DwnlState.Idle:
+                case DwnlState.Complete:
 
                     //find the size of completed chunks
                     long windowStart = Interlocked.Read(ref trackerWindowStart);
-                    double newDwnlSizeCompleted = windowStart * Download.DwnlSize;
+                    long windowEnd = Interlocked.Read(ref trackerWindowEnd);
+                    double newDwnlSizeCompleted = windowStart * Download.DwnlChunks.ChunkSize;
 
                     //update the size of the active chunks
-                    for (long i = windowStart; i < Interlocked.Read(ref trackerWindowEnd); i++)
+                    for (long i = windowStart; i < windowEnd; i++)
                     {
-                        double newChunkSizeCompleted = Download.DwnlChunks.ChunkProgress[i];
+                        double newChunkSizeCompleted = Interlocked.Read(ref Download.DwnlChunks.ChunkProgress[i]);
                         newDwnlSizeCompleted += newChunkSizeCompleted;
                     }
 
@@ -175,7 +181,7 @@ namespace Downloader
         /// </summary>
         private void Downloading()
         {
-            //starts n threads allowed by the limit 
+            //starts n threads allowed by the limit
             //updates the tracker window
             long nextChunk;
             for (nextChunk = 0; nextChunk < Math.Min(threadLimit, Download.DwnlChunks.ChunkCount); nextChunk++)
@@ -193,13 +199,46 @@ namespace Downloader
                 chunkDownloaders[i].Join();
                 Interlocked.Increment(ref trackerWindowStart);
 
-                if (State == DwnlState.Abort) return;
+                if (State == DwnlState.Abort) Thread.CurrentThread.Abort();
                 else if (nextChunk < Download.DwnlChunks.ChunkCount)
                 {
                     chunkDownloaders[nextChunk].Start();
                     Interlocked.Increment(ref trackerWindowEnd);
                 }
             }
+
+            //Thread[] schedulerThreads = new Thread[Math.Min(threadLimit, Download.DwnlChunks.ChunkCount)];
+            //for (long i = 0, nextChunk = 0; i < schedulerThreads.LongLength; i++)
+            //{
+            //    schedulerThreads[i] = new Thread(() => {
+            //        try
+            //        {
+            //            while (true)
+            //            {
+            //                long currentChunk = 0;
+            //                lock (Download)
+            //                {
+            //                    currentChunk = nextChunk++;
+            //                    chunkDownloaders[currentChunk].Start();
+            //                }
+
+            //                chunkDownloaders[currentChunk].Join();
+
+            //                lock (Download)
+            //                {
+            //                    if (State == DwnlState.Abort || nextChunk >= Download.DwnlChunks.ChunkCount)
+            //                    {
+            //                        break;
+            //                    }
+            //                }
+            //            }
+            //        }
+            //        catch (Exception e)
+            //        {
+            //            Error = e;
+            //        }
+            //    });
+            //}
         }
 
         /// <summary>
@@ -233,15 +272,12 @@ namespace Downloader
         private void Aborting()
         {
             //stop all the thread in sync mode
-            switch (State)
+            if (workerThread.IsAlive)
             {
-                case DwnlState.Download:
-                    workerThread.Abort();
-                    for (long i = 0; i < Download.DwnlChunks.ChunkCount; i++)
-                    {
-                        chunkDownloaders[i].Abort();
-                    }
-                    break;
+                for (long i = 0; i < Download.DwnlChunks.ChunkCount; i++)
+                {
+                    chunkDownloaders[i].Abort();
+                }
             }
         }
     }

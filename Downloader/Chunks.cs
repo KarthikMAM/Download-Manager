@@ -10,14 +10,14 @@ namespace Downloader
     public class Chunks : IChunks
     {
         //chunk meta-data
-        public long ChunkSize;
+        public long ChunkSize { private set; get; }
         public long ChunkCount { private set; get; }
         public string ChunkSource { private set; get; }
         public string ChunkTargetTemplate { private set; get; }
 
         //chunk tracking data
-        public long[] ChunkProgress;
-        public long TotalSize;
+        public long[] ChunkProgress { private set; get; }
+        public long TotalSize { private set; get; }
 
         /// <summary>
         /// creates the chunk data repo
@@ -33,7 +33,7 @@ namespace Downloader
             ChunkSource = chunkSource;
             ChunkCount = FindChunkCount();
             ChunkSize = ChunkCount != 1 ? chunkSize : totalSize;
-            ChunkTargetTemplate = (uint)(ChunkSource + ChunkSize + TotalSize).GetHashCode() + "/file {0}.chunk";
+            ChunkTargetTemplate = (uint)(ChunkSource + ChunkSize).GetHashCode() + "/file {0}.chunk";
 
             //set chunks tracking data
             ChunkProgress = new long[ChunkCount];
