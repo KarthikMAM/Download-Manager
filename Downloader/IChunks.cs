@@ -3,11 +3,13 @@
     public interface IChunks
     {
         long ChunkCount { get; }
+        long[] ChunkProgress { get; }
+        long ChunkSize { get; }
         string ChunkSource { get; }
         string ChunkTargetTemplate { get; }
+        long TotalSize { get; }
 
-        long ChunkEnd(long id);
-        long ChunkStart(long id);
         string ChunkTarget(long id);
+        void Download(long id);
     }
 }

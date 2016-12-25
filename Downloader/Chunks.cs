@@ -1,14 +1,20 @@
 ﻿using System;
 using System.IO;
 using System.Net;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Downloader
 {
     /// <summary>
-    /// defines all the chunks of a download job
+    /// defines all the chunk download jobs of a download job
     /// </summary>
     public class Chunks : IChunks
     {
+        //constants
+        public const int CHUNK_BUFFER_SIZE = 8192;
+        public const long CHUNK_SIZE_LIMIT = 10 * 1024 * 1024;
+
         //chunk meta-data
         public long ChunkSize { private set; get; }
         public long ChunkCount { private set; get; }
@@ -25,15 +31,14 @@ namespace Downloader
         /// <param name="chunkSource">url to download the chunk from</param>
         /// <param name="chunkSize">maximum size of each chunk</param>
         /// <param name="totalSize">total size of all the chunk</param>
-        public Chunks(string chunkSource, long chunkSize, long totalSize)
+        public Chunks(string chunkSource, long totalSize)
         {
             //set chunk meta-data
-            ChunkSize = chunkSize;
             TotalSize = totalSize;
             ChunkSource = chunkSource;
             ChunkCount = FindChunkCount();
-            ChunkSize = ChunkCount != 1 ? chunkSize : totalSize;
-            ChunkTargetTemplate = (uint)(ChunkSource + ChunkSize).GetHashCode() + "/file {0}.chunk";
+            ChunkSize = ChunkCount != 1 ? CHUNK_SIZE_LIMIT : totalSize;
+            ChunkTargetTemplate = (uint)(ChunkSource + ChunkSize + TotalSize).GetHashCode() + "/file {0}.chunk";
 
             //set chunks tracking data
             ChunkProgress = new long[ChunkCount];
@@ -51,15 +56,15 @@ namespace Downloader
         {
             //request for finding the number of chunks
             HttpWebRequest rangeReq = WebRequest.CreateHttp(ChunkSource);
-            rangeReq.AddRange(0, ChunkSize);
+            rangeReq.AddRange(0, CHUNK_SIZE_LIMIT);
             rangeReq.AllowAutoRedirect = true;
 
-            //returns appropriate number of chunks
+            //returns appropriate number of chunks based on accept-ranges
             using (HttpWebResponse rangeRes = (HttpWebResponse)rangeReq.GetResponse())
             {
                 if (rangeRes.StatusCode < HttpStatusCode.Redirect && rangeRes.Headers[HttpResponseHeader.AcceptRanges] == "bytes")
                 {
-                    return (TotalSize / ChunkSize + (TotalSize % ChunkSize > 0 ? 1 : 0));
+                    return (TotalSize / CHUNK_SIZE_LIMIT + (TotalSize % CHUNK_SIZE_LIMIT > 0 ? 1 : 0));
                 }
                 else
                 {
@@ -76,17 +81,60 @@ namespace Downloader
         public string ChunkTarget(long id) { return string.Format(ChunkTargetTemplate, id); }
 
         /// <summary>
-        /// getter for the chunk's start position
+        /// chunk download logic
         /// </summary>
-        /// <param name="id">chunk's id</param>
-        /// <returns>start position of the chunk</returns>
-        public long ChunkStart(long id) { return ChunkSize * id; }
+        public void Download(long id)
+        {
+            //adjust the download range and progress for resume connections
+            long chunkStart = ChunkSize * id;
+            long chunkEnd = Math.Min(chunkStart + ChunkSize - 1, TotalSize);
+            long chunkDownloaded = File.Exists(ChunkTarget(id)) ? new FileInfo(ChunkTarget(id)).Length : 0;
+            chunkStart += chunkDownloaded;
+            ChunkProgress[id] = chunkDownloaded;
 
-        /// <summary>
-        /// getter for the chunk's end position
-        /// </summary>
-        /// <param name="id">chunk's id</param>
-        /// <returns>end position of the chunk</returns>
-        public long ChunkEnd(long id) { return Math.Min(ChunkSize * id + ChunkSize - 1, TotalSize); }
+            //check if there is a need to download
+            if (chunkStart < chunkEnd)
+            {
+                //prepare the download request
+                HttpWebRequest dwnlReq = WebRequest.CreateHttp(ChunkSource);
+                dwnlReq.AllowAutoRedirect = true;
+                dwnlReq.AddRange(chunkStart, chunkEnd);
+                dwnlReq.ServicePoint.ConnectionLimit = 100;
+                dwnlReq.ServicePoint.Expect100Continue = false;
+
+                try
+                {
+                    using (HttpWebResponse dwnlRes = (HttpWebResponse)dwnlReq.GetResponse())
+                    using (Stream dwnlSource = dwnlRes.GetResponseStream())
+                    using (FileStream dwnlTarget = new FileStream(ChunkTarget(id), FileMode.Append, FileAccess.Write))
+                    {
+                        //buffer and downloaded buffer size
+                        int downloadedBufferSize;
+                        byte[] buffer = new byte[CHUNK_BUFFER_SIZE];
+
+                        do
+                        {
+                            //read the download response async
+                            //in the mean time flush the writable data and wait for result
+                            //write the new buffered data to the target stream
+
+                            Task<int> bufferReader = dwnlSource.ReadAsync(buffer, 0, CHUNK_BUFFER_SIZE);
+                            dwnlTarget.Flush();
+                            bufferReader.Wait();
+                            downloadedBufferSize = bufferReader.Result;
+                            Interlocked.Add(ref ChunkProgress[id], downloadedBufferSize);
+                            dwnlTarget.Write(buffer, 0, downloadedBufferSize);
+
+                        } while (downloadedBufferSize > 0);
+                    }
+
+                }
+                finally
+                {
+                    //abort if request is still open
+                    dwnlReq.Abort();
+                }
+            }
+        }
     }
 }
