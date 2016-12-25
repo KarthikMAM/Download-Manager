@@ -67,10 +67,13 @@ namespace Downloader
         {
             switch (State)
             {
+                case DwnlState.Complete:
                 case DwnlState.Download:
-                    TimeSpan timeSpan = ((DispatcherTimer)sender).Interval;
-                    Download.UpdateDownloadProgress(timeSpan.Seconds + (double)timeSpan.Milliseconds / 1000);
-
+                    if (Download.DwnlProgress < 100)
+                    {
+                        TimeSpan timeSpan = ((DispatcherTimer)sender).Interval;
+                        Download.UpdateDownloadProgress(timeSpan.Seconds + (double)timeSpan.Milliseconds / 1000);
+                    }
                     break;
                 case DwnlState.Append:
 

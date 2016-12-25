@@ -1,6 +1,7 @@
 ﻿using Downloader;
 using Microsoft.Win32;
 using System;
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
@@ -18,12 +19,18 @@ namespace DownloadManager
         DownloadEngine downloadEngine;
         DispatcherTimer downloadTracker;
 
+        /// <summary>
+        /// initializes the main window
+        /// </summary>
         public MainWindow()
         {
             InitializeComponent();
 
             //if text is in clipboard copy it.
-            if (Clipboard.ContainsText()) txtSource.Text = Clipboard.GetText();
+            if (Clipboard.ContainsText() && Clipboard.GetText().Contains("http"))
+            {
+                txtSource.Text = Clipboard.GetText();
+            }
         }
 
         /// <summary>
@@ -50,62 +57,92 @@ namespace DownloadManager
             switch (btSender != btController ? btSender.Name : btSender.Content.ToString())
             {
                 case "btTarget":
-                    try
+
+                    new Thread((dwnlSource) =>
                     {
-                        //find the file name from the url and use it
-                        SaveFileDialog selectTargetDialog = new SaveFileDialog();
-                        selectTargetDialog.FileName = Download.FindFileName(txtSource.Text);
-                        selectTargetDialog.Title = "Select a file to save download";
-                        if (selectTargetDialog.ShowDialog() == true)
-                        {
-                            txtTarget.Text = selectTargetDialog.FileName;
-                        }
-                    }
-                    catch (Exception ex) { MessageBox.Show(ex.Message.Contains(":") ? ex.Message : "Error: ", "Download Failed: Error"); }
-                    break;
-                case "Start":
-                    //disable items on window to prevent inconsistency
-                    if (txtSource.Text.Length != 0 && txtTarget.Text.Length != 0)
-                    {
-                        txtSource.IsEnabled = txtTarget.IsEnabled = btTarget.IsEnabled = false;
-                        btController.IsEnabled = false;
                         try
                         {
-                            //create a new downloader job
-                            download = new Download(txtSource.Text, txtTarget.Text);
+                            //find the file name from the url and use it
+                            SaveFileDialog selectTarget = new SaveFileDialog();
+                            selectTarget.FileName = Download.FindFileName((string)dwnlSource);
+                            selectTarget.Title = "Select a file to save download";
+                            string dwnlTarget = selectTarget.ShowDialog() == true ? selectTarget.FileName : "";
 
-                            //create and start a tracker
-                            downloadTracker = new DispatcherTimer();
-                            downloadTracker.Interval = TimeSpan.FromSeconds(1);
-                            downloadTracker.Tick += Tracker_Tick;
-                            downloadTracker.Start();
-
-                            //create and start the download engine
-                            downloadEngine = new DownloadEngine(download, downloadTracker);
-                            downloadEngine.Start();
+                            //set file path in application thread
+                            Application.Current.Dispatcher.Invoke(() => txtTarget.Text = dwnlTarget);
                         }
                         catch (Exception ex)
                         {
+                            //show exception message
                             MessageBox.Show(ex.Message, "Download Failed");
-                            txtSource.IsEnabled = txtTarget.IsEnabled = btTarget.IsEnabled = true;
-                            btController.IsEnabled = true;
                         }
+                    }).Start(txtSource.Text);
+
+                    break;
+                case "Start":
+
+                    //disable items on window to prevent inconsistency
+                    if (txtSource.Text.Length != 0 && txtTarget.Text.Length != 0)
+                    {
+                        //disable UI
+                        txtSource.IsEnabled
+                            = txtTarget.IsEnabled
+                            = btTarget.IsEnabled
+                            = btSender.IsEnabled
+                            = false;
+
+                        //get the source and target url
+                        string dwnlSource = txtSource.Text;
+                        string dwnlTarget = txtTarget.Text;
+
+                        new Thread(() =>
+                        {
+                            try
+                            {
+                                //create a new download job
+                                download = new Download(dwnlSource, dwnlTarget);
+
+                                //run the rest in application thread
+                                Application.Current.Dispatcher.Invoke(() =>
+                                {
+                                    //stop the download tracker and engine if they exist
+                                    if (downloadTracker != null) { downloadTracker.Stop(); }
+                                    if (downloadEngine != null) { downloadEngine.Abort().Join(); }
+
+                                    //create the tracker, engine
+                                    downloadTracker = new DispatcherTimer();
+                                    downloadTracker.Interval = TimeSpan.FromSeconds(1);
+                                    downloadTracker.Tick += Tracker;
+                                    downloadTracker.Start();
+
+                                    //create the engine
+                                    downloadEngine = new DownloadEngine(download, downloadTracker);
+                                    downloadEngine.Start();
+                                });
+                            }
+                            catch (Exception ex)
+                            {
+                                MessageBox.Show(ex.Message, "Download Failed");
+
+                                //reset the UI in application thread
+                                Application.Current.Dispatcher.Invoke(() => ResetUI());
+                            }
+                        }).Start();
                     }
                     else
                     {
                         MessageBox.Show("Need Download source and target path", "Incomplete Data");
                     }
+
                     break;
                 case "Pause":
-                    btController.IsEnabled = false;
                     downloadEngine.Abort();
+
                     break;
                 case "Resume":
-                    btController.IsEnabled = false;
-
                     downloadEngine.Start();
-                    break;
 
+                    break;
             }
         }
 
@@ -115,86 +152,121 @@ namespace DownloadManager
         /// <param name="currentString">current string with n dots</param>
         /// <param name="newString">new string with (n + 1) % 3 dots</param>
         /// <returns></returns>
-        private String DotAnimation(string currentString, string newString)
+        private string DotAnimation(string currentString, string newString)
         {
             string dotAnimation = "";
-            if (currentString.Contains(" ● ● ●")) dotAnimation = " ●    ";
-            else if (currentString.Contains(" ● ●  ")) dotAnimation = " ● ● ●";
-            else dotAnimation = " ● ●  ";
+            if (currentString.Contains(" ● ● ●")) dotAnimation = " ●      ";
+            else if (currentString.Contains(" ● ●   ")) dotAnimation = " ● ● ●";
+            else dotAnimation = " ● ●   ";
 
             return newString + dotAnimation;
         }
 
         /// <summary>
-        /// download engine tracker
+        /// resets the UI to normal state
         /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
-        private void Tracker_Tick(object sender, EventArgs e)
+        private void ResetUI()
         {
-            //change controller states and update the progress
+            //reset UI
+            btController.Content = "Start";
+            txtSource.IsEnabled
+                = txtTarget.IsEnabled
+                = btTarget.IsEnabled
+                = btController.IsEnabled
+                = true;
+        }
+
+        /// <summary>
+        /// download engine tracker updating the UI
+        /// </summary>
+        /// <param name="sender">dispatcher timer tracker</param>
+        /// <param name="e">eventargs</param>
+        private void Tracker(object sender, EventArgs e)
+        {
+            //tracking progress data
+            string strSize = Download.FormatBytes(download.DwnlSize);
+            string strCompleted = Download.FormatBytes(download.DwnlSizeCompleted);
+            string strSpeed = "0.00 KBps";
+            string strProgress = txtProgress.Content.ToString();
+            double valProgress = 0;
+
             switch (downloadEngine.State)
             {
-                case DwnlState.Error:
-                    if (txtSource.IsEnabled == false)
-                    {
-                        btController.Content = "Start";
-                        btController.IsEnabled = true;
-                        txtSource.IsEnabled = txtTarget.IsEnabled = btTarget.IsEnabled = true;
-                        txtProgress.Content = "Error aborted ● ● ●";
+                case DwnlState.Create:
+                    strProgress = DotAnimation(strProgress, "Creating download job");
 
-                        if (downloadEngine != null) MessageBox.Show(downloadEngine.Error.Message, "Download Failed");
-                    }
                     break;
                 case DwnlState.Idle:
+                    strProgress = "Waiting to start / resume download ● ● ●";
+
+                    //enable resume button
                     btController.Content = "Resume";
                     btController.IsEnabled = true;
-                    txtProgress.Content = "Waiting to start / resume the download ● ● ●";
+
+                    break;
+                case DwnlState.Start:
+                    strProgress = DotAnimation(strProgress, "Starting download");
 
                     break;
                 case DwnlState.Download:
+                    strSpeed = Download.FormatBytes(download.DwnlSpeed) + "ps";
+                    valProgress = download.DwnlProgress;
+                    strProgress = DotAnimation(strProgress, string.Format("Downloading at {0:f2}%", download.DwnlProgress));
+
+                    //enable the pause button
                     btController.Content = "Pause";
                     btController.IsEnabled = true;
 
-                    //update progress of the download
-                    txtSize.Content = String.Format("{0:f3} MB", (double)download.DwnlSize / Download.MB);
-                    txtComplete.Content = String.Format("{0:f3} MB", (double)download.DwnlSizeCompleted / Download.MB);
-                    txtSpeed.Content = String.Format("{0:f3} MBps", (double)download.DwnlSpeed / Download.MB);
-
-                    txtProgress.Content = DotAnimation(txtProgress.Content.ToString(), string.Format("Download completion at {0:f2} %", download.DwnlProgress));
-
                     break;
                 case DwnlState.Append:
+                    valProgress = download.AppendProgress;
+                    strProgress = DotAnimation(strProgress, string.Format("Appending at {0:f2}%", download.AppendProgress));
+
+                    //disable controller
                     btController.IsEnabled = false;
-
-                    //update progress of the download as append
-                    txtSize.Content = String.Format("{0:f3} MB", (double)download.DwnlSize / Download.MB);
-                    txtComplete.Content = String.Format("{0:f3} MB", (double)download.DwnlSize / Download.MB);
-
-                    txtProgress.Content = DotAnimation(txtProgress.Content.ToString(), "Stitching chunks at {0:2f} % " + download.AppendProgress / download.DwnlSize * 100);
 
                     break;
                 case DwnlState.Complete:
-                    btController.IsEnabled = false;
+                    valProgress = 100;
+                    strProgress = "Download complete ● ● ●";
 
-                    //update progress of the download as complete
-                    txtSize.Content = String.Format("{0:f3} MB", (double)download.DwnlSize / Download.MB);
-                    txtComplete.Content = String.Format("{0:f3} MB", (double)download.DwnlSize / Download.MB);
-                    txtSpeed.Content = String.Format("{0:f3} MBps", (double)download.AppendProgress / Download.MB);
+                    ResetUI();
 
-                    txtProgress.Content = "Download complete● ● ● :D";
+                    break;
+                case DwnlState.Error:
+                    strProgress = "Download error ● ● ●";
+
+                    //display error message
+                    if (txtProgress.Content.ToString() != strProgress)
+                    {
+                        MessageBox.Show(downloadEngine.Error.Message, "Download Failed");
+                    }
+
+                    ResetUI();
 
                     break;
                 case DwnlState.Abort:
-                    txtSpeed.Content = "0.000 MBps";
+                    strProgress = DotAnimation(strProgress, "Aborting download");
 
-                    txtProgress.Content = DotAnimation(txtProgress.Content.ToString(), "Aborting");
+                    //disable controller button
+                    btController.IsEnabled = false;
 
                     break;
             }
-            barProgress.Value = download.DwnlProgress;
+
+            //updatring progress data
+            txtSize.Content = strSize;
+            txtComplete.Content = strCompleted;
+            txtSpeed.Content = strSpeed;
+            txtProgress.Content = strProgress;
+            barProgress.Value = valProgress;
         }
 
+        /// <summary>
+        /// url click event
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
         private void Url_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
             switch (((TextBlock)sender).Name)

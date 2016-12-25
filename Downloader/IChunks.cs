@@ -10,6 +10,6 @@
         long TotalSize { get; }
 
         string ChunkTarget(long id);
-        void Download(long id);
+        void DownloadChunk(long id);
     }
 }

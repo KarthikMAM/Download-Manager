@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:DownloadManager"
         mc:Ignorable="d"
-        Title="Download Manager" Height="270" Width="525" ResizeMode="NoResize" Closing="Window_Closing">
+        Title="Downloader" Height="270" Width="525" ResizeMode="NoResize" Closing="Window_Closing">
     <Grid>
         <Grid Width="480" Margin="0, 10, 0, 25">
             <Grid.RowDefinitions>

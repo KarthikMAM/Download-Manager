@@ -12,8 +12,8 @@ namespace Downloader
     public class Chunks : IChunks
     {
         //constants
-        public const int CHUNK_BUFFER_SIZE = 8192;
-        public const long CHUNK_SIZE_LIMIT = 10 * 1024 * 1024;
+        public const int CHUNK_BUFFER_SIZE = 8 * Download.KB;
+        public const long CHUNK_SIZE_LIMIT = 10 * Download.MB;
 
         //chunk meta-data
         public long ChunkSize { private set; get; }
@@ -83,7 +83,7 @@ namespace Downloader
         /// <summary>
         /// chunk download logic
         /// </summary>
-        public void Download(long id)
+        public void DownloadChunk(long id)
         {
             //adjust the download range and progress for resume connections
             long chunkStart = ChunkSize * id;
@@ -104,34 +104,37 @@ namespace Downloader
 
                 try
                 {
+                    //prepare the streams
                     using (HttpWebResponse dwnlRes = (HttpWebResponse)dwnlReq.GetResponse())
                     using (Stream dwnlSource = dwnlRes.GetResponseStream())
                     using (FileStream dwnlTarget = new FileStream(ChunkTarget(id), FileMode.Append, FileAccess.Write))
                     {
                         //buffer and downloaded buffer size
-                        int downloadedBufferSize;
+                        int bufferedSize;
                         byte[] buffer = new byte[CHUNK_BUFFER_SIZE];
 
                         do
                         {
                             //read the download response async
-                            //in the mean time flush the writable data and wait for result
-                            //write the new buffered data to the target stream
-
                             Task<int> bufferReader = dwnlSource.ReadAsync(buffer, 0, CHUNK_BUFFER_SIZE);
+
+                            //in the mean time flush the writable data and wait for result
                             dwnlTarget.Flush();
                             bufferReader.Wait();
-                            downloadedBufferSize = bufferReader.Result;
-                            Interlocked.Add(ref ChunkProgress[id], downloadedBufferSize);
-                            dwnlTarget.Write(buffer, 0, downloadedBufferSize);
 
-                        } while (downloadedBufferSize > 0);
+                            //update buffered size
+                            bufferedSize = bufferReader.Result;
+                            Interlocked.Add(ref ChunkProgress[id], bufferedSize);
+
+                            //write the buffer to targer
+                            dwnlTarget.Write(buffer, 0, bufferedSize);
+
+                        } while (bufferedSize > 0);
                     }
 
                 }
                 finally
                 {
-                    //abort if request is still open
                     dwnlReq.Abort();
                 }
             }

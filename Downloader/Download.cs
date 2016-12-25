@@ -13,7 +13,8 @@ namespace Downloader
     {
         //constants
         private const string FILE_SIZE_SERVER = "http://proxyfilesize.appspot.com/index.php?url={0}";
-        public const long MB = 1024 * 1024;
+        public const int KB = 1024;
+        public const long MB = KB * KB;
 
         //download file properties
         public string DwnlSource { private set; get; }
@@ -51,6 +52,17 @@ namespace Downloader
         }
 
         /// <summary>
+        /// formats the byte size in KB or MB string
+        /// </summary>
+        /// <param name="bytes">no of bytes</param>
+        /// <returns>bytes in KB or MB</returns>
+        public static string FormatBytes(double bytes)
+        {
+            if (bytes < MB) return String.Format("{0:f2} KB", bytes / KB);
+            else return String.Format("{0:f2} MB", bytes / MB);
+        }
+
+        /// <summary>
         /// finds the download file name from the url
         /// </summary>
         /// <param name="dwnlSource">the file whose name we want to find</param>
@@ -60,7 +72,7 @@ namespace Downloader
             //prepare the request headers
             HttpWebRequest fileNameReq = WebRequest.CreateHttp(dwnlSource);
             fileNameReq.AllowAutoRedirect = true;
-            fileNameReq.AddRange(0, 10);
+            fileNameReq.AddRange(0, Chunks.CHUNK_SIZE_LIMIT);
 
             using (HttpWebResponse fileNameRes = (HttpWebResponse)fileNameReq.GetResponse())
             {

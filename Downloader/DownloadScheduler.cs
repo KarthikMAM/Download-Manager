@@ -34,10 +34,10 @@ namespace Downloader
             //create new scheduler threads
             schedulerThreads = new Thread[Math.Min(SCHEDULER_LIMIT, Chunks.ChunkCount)];
             for (int i = 0; i < schedulerThreads.Length; i++)
-                schedulerThreads[i] = new Thread((id) => Schedule(id));
+                schedulerThreads[i] = new Thread(() => Schedule());
 
             //start all the scheduler threads
-            for (int i = 0; i < schedulerThreads.Length; i++) schedulerThreads[i].Start(i);
+            for (int i = 0; i < schedulerThreads.Length; i++) schedulerThreads[i].Start();
 
             //wait for the scheduler threads to finish
             for (int i = 0; i < schedulerThreads.Length; i++)
@@ -74,7 +74,7 @@ namespace Downloader
         /// scheduler thread logic
         /// </summary>
         /// <param name="id"></param>
-        private void Schedule(object id)
+        private void Schedule()
         {
             try
             {
@@ -93,7 +93,7 @@ namespace Downloader
                     //if ok download the next chunk
                     if (currentChunk != -1 && Error == null)
                     {
-                        Chunks.Download(currentChunk);
+                        Chunks.DownloadChunk(currentChunk);
                     }
                     else
                     {
