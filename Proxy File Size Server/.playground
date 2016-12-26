@@ -1,0 +1,7 @@
+{
+  "project_name": "Proxy File Size Server",
+  "project_description": "A Proxy server to get the content-length of a url for my downloader",
+  "show_files": [
+    "app.yaml"
+  ]
+}
