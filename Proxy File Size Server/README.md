@@ -10,4 +10,5 @@
 </ul>
 
 
-<h4><a href="http://proxyfilesize.appspot.com/index.php?url=http://filehippo.com">Content-Length for the request filehippo.com</a></h4> 
+<h4><a href="http://proxyfilesize.appspot.com/index.php?url=http://filehippo.com">Content-Length for the request filehippo.com</a>  from server hosted in google appengine</h4>
+<h4><a href="http://download-manager.esy.es/?url=http://mirror.pnl.gov/releases/12.04.5/ubuntu-12.04.5-desktop-amd64.iso">Content-Length for the ubuntu iso request</a></h4> from server hosted in hostinger 
