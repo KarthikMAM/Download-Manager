@@ -12,7 +12,7 @@ namespace Downloader
     public class Download : IDownload
     {
         //constants
-        private const string FILE_SIZE_SERVER = "http://proxyfilesize.appspot.com/index.php?url={0}";
+        private const string FILE_SIZE_SERVER = "http://download-manager.esy.es/?url={0}";
         public const int KB = 1024;
         public const long MB = KB * KB;
 
@@ -152,23 +152,24 @@ namespace Downloader
         /// <returns>the download file size in bytes</returns>
         private static long FindFileSize(string dwnlSource)
         {
-            //first create a native header request
-            HttpWebRequest fileSizeReq = WebRequest.CreateHttp(dwnlSource);
-            fileSizeReq.AllowAutoRedirect = true;
-
-            using (HttpWebResponse fileSizeRes = (HttpWebResponse)fileSizeReq.GetResponse())
+            try
             {
-                if (fileSizeRes.StatusCode < HttpStatusCode.Found)
+                //first create a native header request
+                HttpWebRequest fileSizeReq = WebRequest.CreateHttp(dwnlSource);
+                fileSizeReq.AllowAutoRedirect = true;
+                using (HttpWebResponse fileSizeRes = (HttpWebResponse)fileSizeReq.GetResponse())
                 {
                     return fileSizeRes.ContentLength;
                 }
-                else
+            }
+            catch
+            {
+                //if problem use the proxy file size server
+                HttpWebRequest proxyFileSizeReq = WebRequest.CreateHttp(string.Format(FILE_SIZE_SERVER, dwnlSource));
+                using (HttpWebResponse proxyFileSizeRes = (HttpWebResponse)proxyFileSizeReq.GetResponse())
+                using (StreamReader fileSizeReader = new StreamReader(proxyFileSizeRes.GetResponseStream()))
                 {
-                    //if problem use the proxy file size server
-                    HttpWebRequest proxyFileSizeReq = WebRequest.CreateHttp(string.Format(FILE_SIZE_SERVER, dwnlSource));
-                    using (HttpWebResponse proxyFileSizeRes = (HttpWebResponse)fileSizeReq.GetResponse())
-                    using (StreamReader fileSizeReader = new StreamReader(proxyFileSizeRes.GetResponseStream()))
-                        return long.Parse(fileSizeReader.ReadLine());
+                    return long.Parse(fileSizeReader.ReadToEnd());
                 }
             }
         }
