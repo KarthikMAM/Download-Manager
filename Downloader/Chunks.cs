@@ -29,7 +29,6 @@ namespace Downloader
         /// creates the chunk data repo
         /// </summary>
         /// <param name="chunkSource">url to download the chunk from</param>
-        /// <param name="chunkSize">maximum size of each chunk</param>
         /// <param name="totalSize">total size of all the chunk</param>
         public Chunks(string chunkSource, long totalSize)
         {
@@ -81,21 +80,22 @@ namespace Downloader
         /// <summary>
         /// getter for the chunk target based on chunk's id
         /// </summary>
-        /// <param name="id">chunk's id</param>
+        /// <param name="chunkId">chunk's id</param>
         /// <returns>chunk's target path</returns>
-        public string ChunkTarget(long id) { return string.Format(ChunkTargetTemplate, id); }
+        public string ChunkTarget(long chunkId) { return string.Format(ChunkTargetTemplate, chunkId); }
 
         /// <summary>
         /// chunk download logic
         /// </summary>
-        public void DownloadChunk(long id)
+        /// <param name="chunkId">chunk to download</param>
+        public void DownloadChunk(long chunkId)
         {
             //adjust the download range and progress for resume connections
-            long chunkStart = ChunkSize * id;
+            long chunkStart = ChunkSize * chunkId;
             long chunkEnd = Math.Min(chunkStart + ChunkSize - 1, TotalSize);
-            long chunkDownloaded = File.Exists(ChunkTarget(id)) ? new FileInfo(ChunkTarget(id)).Length : 0;
+            long chunkDownloaded = File.Exists(ChunkTarget(chunkId)) ? new FileInfo(ChunkTarget(chunkId)).Length : 0;
             chunkStart += chunkDownloaded;
-            ChunkProgress[id] = chunkDownloaded;
+            ChunkProgress[chunkId] = chunkDownloaded;
 
             //check if there is a need to download
             if (chunkStart < chunkEnd)
@@ -112,7 +112,7 @@ namespace Downloader
                     //prepare the streams
                     using (HttpWebResponse dwnlRes = (HttpWebResponse)dwnlReq.GetResponse())
                     using (Stream dwnlSource = dwnlRes.GetResponseStream())
-                    using (FileStream dwnlTarget = new FileStream(ChunkTarget(id), FileMode.Append, FileAccess.Write))
+                    using (FileStream dwnlTarget = new FileStream(ChunkTarget(chunkId), FileMode.Append, FileAccess.Write))
                     {
                         //buffer and downloaded buffer size
                         int bufferedSize;
@@ -120,23 +120,19 @@ namespace Downloader
 
                         do
                         {
-                            //read the download response async
+                            //read the download response async and wait for the results
                             Task<int> bufferReader = dwnlSource.ReadAsync(buffer, 0, CHUNK_BUFFER_SIZE);
-
-                            //in the mean time flush the writable data and wait for result
-                            dwnlTarget.Flush();
                             bufferReader.Wait();
 
                             //update buffered size
                             bufferedSize = bufferReader.Result;
-                            Interlocked.Add(ref ChunkProgress[id], bufferedSize);
+                            Interlocked.Add(ref ChunkProgress[chunkId], bufferedSize);
 
-                            //write the buffer to targer
+                            //write the buffer to target
                             dwnlTarget.Write(buffer, 0, bufferedSize);
 
                         } while (bufferedSize > 0);
                     }
-
                 }
                 finally
                 {

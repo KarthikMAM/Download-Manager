@@ -137,6 +137,7 @@ namespace Downloader
         /// <summary>
         /// aborts the download engine async
         /// </summary>
+        /// <returns>abort thread upon which we can wait</returns>
         public Thread Abort()
         {
             IsStateCompleted = false; State = DwnlState.Abort;
@@ -154,7 +155,6 @@ namespace Downloader
 
             abortThread.Start();
             return abortThread;
-
         }
 
         /// <summary>

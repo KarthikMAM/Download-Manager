@@ -55,16 +55,24 @@ namespace Downloader
         }
 
         /// <summary>
-        /// aborts the scheduler
+        /// aborts the scheduler threads and waits for them
         /// </summary>
         public void Abort()
         {
-            //abort and wait till all the threads have aborted
+            //abort all the threads
             for (int i = 0; i < schedulerThreads.Length; i++)
             {
                 if (schedulerThreads[i].IsAlive)
                 {
                     schedulerThreads[i].Abort();
+                }
+            }
+
+            //wait for all the threads to abort
+            for (int i = 0; i < schedulerThreads.Length; i++)
+            {
+                if (schedulerThreads[i].IsAlive)
+                {
                     schedulerThreads[i].Join();
                 }
             }
@@ -73,7 +81,6 @@ namespace Downloader
         /// <summary>
         /// scheduler thread logic
         /// </summary>
-        /// <param name="id"></param>
         private void Schedule()
         {
             try

@@ -149,6 +149,7 @@ namespace Downloader
         /// <summary>
         /// finds the download file size from the url
         /// </summary>
+        /// <param name="dwnlSource">url of the file whose file size we want to find</param>
         /// <returns>the download file size in bytes</returns>
         private static long FindFileSize(string dwnlSource)
         {
