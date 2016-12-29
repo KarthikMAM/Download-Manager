@@ -38,10 +38,15 @@ namespace Downloader
             ChunkSource = chunkSource;
             ChunkCount = FindChunkCount();
             ChunkSize = ChunkCount != 1 ? CHUNK_SIZE_LIMIT : totalSize;
-            ChunkTargetTemplate = (uint)(ChunkSource + ChunkSize + TotalSize).GetHashCode() + "/file {0}.chunk";
 
             //set chunks tracking data
             ChunkProgress = new long[ChunkCount];
+
+            //chunks cache directory
+            ChunkTargetTemplate = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)
+                + "\\Kappspot\\Download-Manager\\"
+                + (uint)(ChunkSource + ChunkSize + TotalSize).GetHashCode()
+                + "/file {0}.chunk";
 
             //create a temp directory for chunks
             if (!Directory.Exists(Path.GetDirectoryName(ChunkTarget(0))))
