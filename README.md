@@ -22,3 +22,7 @@
 <ul>
     <li>Currently under development, so might be a little buggy and more features will be added as I get more time.
 </ul>
+
+### Featured in:
+    
+- https://listoffreeware.com/free-open-source-download-manager-software-windows/
